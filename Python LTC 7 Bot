@@ -48,17 +48,14 @@ while True:
                 exchange.create_limit_buy_order(symbol, buy_quantity, buy_price)
                 buy_order_placed = True
 
-                # Check if the sell order is still open
-                sell_order = exchange.fetch_order(sell_order_id)
-                if sell_order['status'] != 'closed':
-                    # The sell order is still open, so don't place a new buy order
-                    continue
+                # Reset sell_order_id to None after the sell order executes
+                sell_order_id = None
 
         else:
             # Place initial buy order at the ask price
             buy_price = ask_price
             buy_quantity = 0.1  # You can adjust the buy volume here
-            exchange.create_limit_buy_order(symbol, buy_quantity, buy_price)
+            buy_order = exchange.create_limit_buy_order(symbol, buy_quantity, buy_price)
             buy_order_placed = True
 
             # Place sell order immediately after buying
@@ -73,7 +70,7 @@ while True:
             # No open orders, place a new buy order
             buy_price = exchange.fetch_order(sell_order_id)['price'] * 0.9998
             buy_quantity = 0.1  # You can adjust the buy volume here
-            exchange.create_limit_buy_order(symbol, buy_quantity, buy_price)
+            buy_order = exchange.create_limit_buy_order(symbol, buy_quantity, buy_price)
             buy_order_placed = True
 
             # Place sell order immediately after buying
@@ -81,7 +78,3 @@ while True:
             sell_quantity = buy_quantity
             sell_order = exchange.create_limit_sell_order(symbol, sell_quantity, sell_price)
             sell_order_id = sell_order['id']
-
-        else:
-            # There are open orders, so don't place a new buy order
-            continue
