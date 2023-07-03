@@ -1,0 +1,87 @@
+import ccxt
+import json
+from cryptography.fernet import Fernet
+
+# Load the encrypted data
+with open("encrypted_data.json", "r") as encrypted_file:
+    encrypted_data = json.load(encrypted_file)
+
+# Load the encryption key
+with open("key.txt", "rb") as key_file:
+    key = key_file.read()
+
+# Create the cipher suite using the key
+cipher_suite = Fernet(key)
+
+# Decrypt the API key and secret key
+api_key = cipher_suite.decrypt(encrypted_data['apiKey'].encode()).decode()
+secret_key = cipher_suite.decrypt(encrypted_data['secret'].encode()).decode()
+
+# Decrypt the password
+password = cipher_suite.decrypt(encrypted_data['password'].encode()).decode()
+
+# Create an instance of the exchange you want to trade on
+exchange = ccxt.kucoin({
+    'apiKey': api_key,
+    'secret': secret_key,
+    'password': password
+})
+
+# Constants for trading parameters
+symbol = 'LTC/USDT'  # Replace with your desired trading pair
+
+# Flag to track whether a buy order is already placed
+buy_order_placed = False
+sell_order_id = None
+
+while True:
+    ticker = exchange.fetch_ticker(symbol)
+    ask_price = ticker['ask']
+
+    if not buy_order_placed:
+        if sell_order_id:
+            sell_order = exchange.fetch_order(sell_order_id)
+            if sell_order['status'] == 'closed':
+                # Place buy order at 0.02% lower than the executed sell price
+                buy_price = sell_order['price'] * 0.9998
+                buy_quantity = 0.1  # You can adjust the buy volume here
+                exchange.create_limit_buy_order(symbol, buy_quantity, buy_price)
+                buy_order_placed = True
+
+                # Check if the sell order is still open
+                sell_order = exchange.fetch_order(sell_order_id)
+                if sell_order['status'] != 'closed':
+                    # The sell order is still open, so don't place a new buy order
+                    continue
+
+        else:
+            # Place initial buy order at the ask price
+            buy_price = ask_price
+            buy_quantity = 0.1  # You can adjust the buy volume here
+            exchange.create_limit_buy_order(symbol, buy_quantity, buy_price)
+            buy_order_placed = True
+
+            # Place sell order immediately after buying
+            sell_price = buy_price * 1.0002
+            sell_quantity = buy_quantity
+            sell_order = exchange.create_limit_sell_order(symbol, sell_quantity, sell_price)
+            sell_order_id = sell_order['id']
+
+    else:
+        open_orders = exchange.fetch_open_orders(symbol)
+        if len(open_orders) == 0:
+            # No open orders, place a new buy order
+            buy_price = exchange.fetch_order(sell_order_id)['price'] * 0.9998
+            buy_quantity = 0.1  # You can adjust the buy volume here
+            exchange.create_limit_buy_order(symbol, buy_quantity, buy_price)
+            buy_order_placed = True
+
+            # Place sell order immediately after buying
+            sell_price = buy_price * 1.0002
+            sell_quantity = buy_quantity
+            sell_order = exchange.create_limit_sell_order(symbol, sell_quantity, sell_price)
+            sell_order_id = sell_order['id']
+
+        else:
+            # There are open orders, so don't place a new buy order
+            continue
